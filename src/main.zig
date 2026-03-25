@@ -1,6 +1,7 @@
 const std = @import("std");
 const mrubyOnHttp = @import("mrubyOnHttp");
 const httpz = @import("httpz");
+const c = mrubyOnHttp.c;
 
 const PORT = 8802;
 
@@ -11,6 +12,14 @@ pub fn main() !void {
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
+
+    // run main.rb of mruby first
+    const mrb = c.mrb_open();
+    if (mrb) |m| {
+        const mrb_result = c.mrb_load_irep(m, c.rb_main);
+        _ = c.mrb_funcall(m, c.mrb_top_self(m), "puts", 1, mrb_result);
+        defer c.mrb_close(m);
+    }
 
     // We specify our "Handler" and, as the last parameter to init, pass an
     // instance of it.

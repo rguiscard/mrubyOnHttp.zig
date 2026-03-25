@@ -28,11 +28,22 @@ pub fn build(b: *std.Build) void {
     // to our consumers. We must give it a name because a Zig package can expose
     // multiple modules and consumers will need to be able to specify which
     // module they want to access.
+
+    // http.zig
     const httpz = b.dependency("httpz", .{
         .target = target,
         .optimize = optimize,
     });
 
+    // mruby
+    const mruby_path = "mruby-4.0.0-rc2/build/host/";
+    const mrbc = b.addSystemCommand(&.{
+        mruby_path++"bin/mrbc",
+        "-Brb_main",
+    });
+
+    const mrb_c = mrbc.addPrefixedOutputFileArg("-o", "main.c");
+    mrbc.addFileArg(b.path("src/main.rb"));
 
     const mod = b.addModule("mrubyOnHttp", .{
         // The root source file is the "entry point" of this module. Users of
@@ -46,6 +57,12 @@ pub fn build(b: *std.Build) void {
         // which requires us to specify a target.
         .target = target,
     });
+    mod.addCSourceFile(.{
+        .file = mrb_c,
+        .flags = &.{},
+    });
+    mod.addIncludePath(b.path(mruby_path++"include/"));
+    mod.addObjectFile(b.path(mruby_path++"lib/libmruby.a"));
 
     // Here we define an executable. An executable needs to have a root module
     // which needs to expose a `main` function. While we could add a main function

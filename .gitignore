@@ -2,4 +2,4 @@
 *.swp
 zig-out/
 .zig-cache/
-mruby-3.4.0/
+mruby-4.0.0-rc2/
