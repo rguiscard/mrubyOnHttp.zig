@@ -108,3 +108,17 @@ export var edata: u8 = 0;
 export var end: u8 = 0;
 export var etext: u8 = 0;
 ```
+
+To use mruby, add this to *src/main.zig*:
+
+```
+// run main.rb of mruby first
+const mrb = c.mrb_open();
+if (mrb) |m| {
+    const mrb_result = c.mrb_load_irep(m, c.rb_main);
+    _ = c.mrb_funcall(m, c.mrb_top_self(m), "puts", 1, mrb_result);
+    defer c.mrb_close(m);
+}
+```
+
+Run `zig build run`. It would compile *src/main.rb* to bytecode and load it from zig main.
