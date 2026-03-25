@@ -1,3 +1,130 @@
+# #######################
+# Modified from https://github.com/rbuchberger/objective_elements
+# Author: Robert Buchberger <robert@buchberger.cc>
+# License: MIT
+#
+# This module provides a few helpful classes for generating HTML using simple
+# Ruby. Its goal is to be lightweight, and more focused than the general-purpose
+# nature of nokogiri.
+module ObjectiveElements
+  class HTMLAttributes
+    attr_reader :content
+    def initialize(new = nil)
+      @content = {}
+      self << new
+    end
+
+    def to_s
+      return_string = ''
+      @content.each do |k, v|
+        v = [v] unless v.is_a? Array
+        v << '' if v.empty?
+        return_string << "#{k}=\"#{v.join ' '}\" "
+      end
+      return_string.strip
+    end
+
+    def <<(new)
+      return self unless new
+      if new.is_a? Hash
+        new.each { |k, v| @content[k.to_sym] = v.is_a?(String) ? v.split(' ') : [v] }
+      end
+      self
+    end
+
+    def empty?
+      @content.empty?
+    end
+  end
+
+  class SingleTag
+    attr_reader :element, :attributes
+
+    def initialize(element, attributes = nil)
+      @element = element
+      @attributes = HTMLAttributes.new(attributes)
+    end
+
+    def to_s
+      s = '<' + @element
+      s << ' ' + @attributes.to_s unless @attributes.empty?
+      s << '>'
+      s
+    end
+  end
+
+  class DoubleTag < SingleTag
+    attr_reader :content
+
+    def initialize(element, attributes = nil, content = nil)
+      super(element, attributes)
+      @content = content || ""
+    end
+
+    def add_content(c)
+      @content += c.to_s
+    end
+
+    def to_s
+      s = '<' + @element
+      s << ' ' + @attributes.to_s unless @attributes.empty?
+      s << '>'
+      s << @content.to_s
+      s << '</' + @element + '>'
+      s
+    end
+  end
+end
+#
+# End of ObjectiveElements
+# ########################
+
+class Html
+  include ObjectiveElements
+
+  def initialize
+    @elements = []
+  end
+
+  def tag(name, attrs = nil, content = nil, &block)
+    if block
+      inner = Html.new
+      inner.instance_eval(&block)
+      dt = DoubleTag.new(name, attrs)
+      dt.add_content(inner.build)
+      @elements << dt
+    elsif content
+      @elements << DoubleTag.new(name, attrs, content)
+    else
+      @elements << SingleTag.new(name, attrs)
+    end
+    nil
+  end
+
+  def text(str)
+    @elements << str.to_s
+    nil
+  end
+
+  def method_missing(name, *args, &block)
+    attrs = (args.first.is_a?(Hash) ? args.first : nil)
+    content = args.first.is_a?(String) ? args.first : nil
+    tag(name.to_s, attrs, content, &block)
+  end
+
+  def respond_to_missing?(method, include_private = false)
+    true
+  end
+
+  def build
+    @elements.map { |e| e.to_s }.join("\n")
+  end
+
+  def to_s
+    build
+  end
+end
+
 module Zap
   class Controller
     attr_reader :env, :params
@@ -89,11 +216,29 @@ module Zap
 
         # this defaults to default_app above, using Rails-like route pattern
         get '/say/{word}', to: "zap/hello#say"
+
+        get '/home', to: "page#home"
       end
     end
 
     def entry_point(env)
       return app.call(env)
     end
+  end
+end
+
+class PageController < Zap::Controller
+  def home
+    h = Html.new
+
+    h.html do
+      head do
+      end
+      body do
+        tag("p") { text "Home Page" }
+      end
+    end
+
+    render h.to_s
   end
 end
