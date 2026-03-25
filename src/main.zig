@@ -19,39 +19,88 @@ pub fn main() !void {
         const mrb_result = c.mrb_load_irep(m, c.rb_main);
         _ = c.mrb_funcall(m, c.mrb_top_self(m), "puts", 1, mrb_result);
         defer c.mrb_close(m);
+
+        // We specify our "Handler" and, as the last parameter to init, pass an
+        // instance of it.
+        var handler = Handler{
+            .mrb = m,
+        };
+        var server = try httpz.Server(*Handler).init(allocator, .{ .address = .localhost(PORT) }, &handler);
+
+        defer server.deinit();
+
+        // ensures a clean shutdown, finishing off any existing requests
+        // see 09_shutdown.zig for how to to break server.listen with an interrupt
+        defer server.stop();
+
+        var router = try server.router(.{});
+
+        // Register routes.
+
+        router.get("/", index, .{});
+        router.get("/hits", hits, .{});
+        router.get("/error", @"error", .{});
+
+        std.debug.print("listening http://localhost:{d}/\n", .{PORT});
+
+        // Starts the server, this is blocking.
+        try server.listen();
+    } else {
+        std.debug.print("Unable to initialize mruby vm\n", .{});
     }
-
-    // We specify our "Handler" and, as the last parameter to init, pass an
-    // instance of it.
-    var handler = Handler{};
-    var server = try httpz.Server(*Handler).init(allocator, .{ .address = .localhost(PORT) }, &handler);
-
-    defer server.deinit();
-
-    // ensures a clean shutdown, finishing off any existing requests
-    // see 09_shutdown.zig for how to to break server.listen with an interrupt
-    defer server.stop();
-
-    var router = try server.router(.{});
-
-    // Register routes.
-
-    router.get("/", index, .{});
-    router.get("/hits", hits, .{});
-    router.get("/error", @"error", .{});
-
-    std.debug.print("listening http://localhost:{d}/\n", .{PORT});
-
-    // Starts the server, this is blocking.
-    try server.listen();
 }
 
 const Handler = struct {
+    mrb: ?*c.mrb_state,
     _hits: usize = 0,
 
     // If the handler defines a special "notFound" function, it'll be called
     // when a request is made and no route matches.
-    pub fn notFound(_: *Handler, _: *httpz.Request, res: *httpz.Response) !void {
+    pub fn notFound(handler: *Handler, req: *httpz.Request, res: *httpz.Response) !void {
+        const path = req.url.path;
+        const method = switch(req.method) {
+            .GET => "GET",
+            .POST => "POST",
+            .PUT => "PUT",
+            .PATCH => "PATCH",
+            .DELETE => "DELETE",
+            else => "GET",
+        };
+        std.debug.print("notFound {}({s}): {s}\n", .{ req.method, method, path });
+        if (handler.mrb) |m| {
+            const env = c.mrb_hash_new(m);
+            _ = c.mrb_hash_set(m, env, zigStringToRuby(m, "PATH_INFO"),
+                                       zigStringToRuby(m, path));
+            _ = c.mrb_hash_set(m, env, zigStringToRuby(m, "REQUEST_METHOD"),
+                                       zigStringToRuby(m, method));
+            const mod = c.mrb_module_get(m, "Zap");
+            const cls = c.mrb_class_get_under(m, mod, "App");
+            const app = c.mrb_obj_new(m, cls, 0, null); // should we always create new object ?
+//                const mrb_result = c.mrb_funcall(m, c.mrb_obj_value(cls), "entry_point", 1, env);
+            const mrb_result = c.mrb_funcall(m, app, "entry_point", 1, env);
+            _ = c.mrb_funcall(m, c.mrb_top_self(m), "puts", 1, mrb_result);
+
+            const array_class = c.mrb_class_get(m, "Array");
+            const string_class = c.mrb_class_get(m, "String");
+            if (c.mrb_obj_is_kind_of(m, mrb_result, array_class)) {
+                const body = c.mrb_ary_ref(m, mrb_result, 2);
+                var cstr: [*:0]const u8 = undefined;
+                if (c.mrb_obj_is_kind_of(m, body, array_class)) {
+                    const data = c.mrb_ary_ref(m, body, 0);
+                    cstr = c.mrb_str_to_cstr(m, data);
+                } else if (c.mrb_obj_is_kind_of(m, body, string_class)) {
+                    cstr = c.mrb_str_to_cstr(m, body);
+                }
+                const len: usize = std.mem.len(cstr);
+                const out = try res.arena.alloc(u8, len);
+//                defer res.arena.free(out);
+                @memcpy(out, cstr[0..len]);
+
+                res.status = 200;
+                res.body = out;
+                return;
+            }
+        }
         res.status = 404;
         res.body = "NOPE!";
     }
@@ -97,6 +146,10 @@ pub fn hits(h: *Handler, _: *httpz.Request, res: *httpz.Response) !void {
 
 fn @"error"(_: *Handler, _: *httpz.Request, _: *httpz.Response) !void {
     return error.ActionError;
+}
+
+fn zigStringToRuby(m: *c.mrb_state, txt:[]const u8) c.mrb_value {
+    return c.mrb_str_new(m, txt.ptr, @as(c.mrb_int, @intCast(txt.len)));
 }
 
 test "simple test" {
