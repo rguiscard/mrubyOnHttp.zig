@@ -112,6 +112,11 @@ export var etext: u8 = 0;
 To use mruby, add this to *src/main.zig*:
 
 ```
+const mrubyOnHttp = @import("mrubyOnHttp");
+const c = mrubyOnHttp.c;
+
+...
+
 // run main.rb of mruby first
 const mrb = c.mrb_open();
 if (mrb) |m| {
