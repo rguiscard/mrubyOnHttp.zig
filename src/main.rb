@@ -74,6 +74,18 @@ module ObjectiveElements
       s
     end
   end
+
+  class Doctype
+    attr_reader :content
+
+    def initialize(content = nil)
+      @content = content || "html"
+    end
+
+    def to_s
+      "<!DOCTYPE " + @content + ">"
+    end
+  end
 end
 #
 # End of ObjectiveElements
@@ -106,9 +118,20 @@ class Html
     nil
   end
 
+  def doctype(content = nil)
+    @elements << Doctype.new(content)
+    nil
+  end
+
   def method_missing(name, *args, &block)
     attrs = (args.first.is_a?(Hash) ? args.first : nil)
     content = args.first.is_a?(String) ? args.first : nil
+
+    if name.to_s == "DOCTYPE".downcase
+      @elements << Doctype.new(content)
+      return nil
+    end
+
     tag(name.to_s, attrs, content, &block)
   end
 
@@ -218,6 +241,7 @@ module Zap
         get '/say/{word}', to: "zap/hello#say"
 
         get '/home', to: "page#home"
+        get '/calculator', to: "page#calculator"
       end
     end
 
@@ -236,6 +260,54 @@ class PageController < Zap::Controller
       end
       body do
         tag("p") { text "Home Page" }
+      end
+    end
+
+    render h.to_s
+  end
+
+  def calculator
+    h = Html.new
+
+    h.doctype
+    h.html do
+      head do
+        meta(charset:"UTF-8")
+        meta(name:"viewport", content:"width=device-width, initial-scale=1.0")
+        title "Calculator"
+        link(rel:"stylesheet", href:"https://unpkg.com/@sakun/system.css")
+      end
+      body do
+        div(class: "window", style: "max-width: 300px; margin: 50px auto;") do
+          div(class: "title-bar") do
+            h1(class: "title") { text "Calculator" }
+          end
+          div(style: "padding: 12px;") do
+              input(type: "text", id: "display", style: "width: 100%; text-align: right; padding: 12px; box-sizing: border-box;", readonly: "readonly", value: "0")
+      div(style: "display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px;") do
+        ["7", "8", "9", "/"].each do |btn|
+          button(onclick: "append('" + btn + "')", class: "btn", style: "padding: 2px; ") { text btn }
+        end
+        text ""
+        ["4", "5", "6", "*"].each do |btn|
+          button(onclick: "append('" + btn + "')", class: "btn", style: "padding: 2px; ") { text btn }
+        end
+        text ""
+        ["1", "2", "3", "-"].each do |btn|
+          button(onclick: "append('" + btn + "')", class: "btn", style: "padding: 2px; ") { text btn }
+        end
+        text ""
+        button(onclick: "clearDisplay()", class: "btn", style: "padding: 2px; ") { text "C" }
+        button(onclick: "append('0')", class: "btn", style: "padding: 2px; ") { text "0" }
+        button(onclick: "calculate()", class: "btn", style: "padding: 2px; ") { text "=" }
+        button(onclick: "append('+')", class: "btn", style: "padding: 2px; ") { text "+" }
+      end
+      end
+    end
+        script(src:"/assets/mithril.min.js") {}
+            script do
+      text "var display = document.getElementById('display'); function append(n) { display.value = display.value === '0' ? n : display.value + n; } function clearDisplay() { display.value = '0'; } function calculate() { try { display.value = eval(display.value); } catch(e) { display.value = 'Error'; } }"
+    end
       end
     end
 
