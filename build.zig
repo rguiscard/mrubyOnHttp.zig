@@ -1,4 +1,5 @@
 const std = @import("std");
+const assets = @import("src/assets.zig").assets;
 
 // Although this function looks imperative, it does not perform the build
 // directly and instead it mutates the build graph (`b`) that will be then
@@ -108,6 +109,22 @@ pub fn build(b: *std.Build) void {
 
     // the executable from your call to b.addExecutable(...)
     exe.root_module.addImport("httpz", httpz.module("httpz"));
+
+    // Create gzipped assets
+    inline for (assets) |asset| {
+        const path, const name, _, const to_gzip = asset;
+        if (to_gzip) {
+            const gzip = b.addSystemCommand(&.{
+                "gzip",
+                "-c",
+            });
+            gzip.addFileArg(b.path(path));
+            const gout = gzip.captureStdOut();
+            exe.root_module.addAnonymousImport(name, .{ .root_source_file = gout});
+        } else {
+            exe.root_module.addAnonymousImport(name, .{ .root_source_file = b.path(path)});
+        }
+    }
 
     // This declares intent for the executable to be installed into the
     // install prefix when running `zig build` (i.e. when executing the default

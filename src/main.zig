@@ -2,6 +2,8 @@ const std = @import("std");
 const mrubyOnHttp = @import("mrubyOnHttp");
 const httpz = @import("httpz");
 const c = mrubyOnHttp.c;
+// need to match asset name in src/assets.zig
+const assets = @import("assets.zig").assets;
 
 const PORT = 8802;
 
@@ -20,10 +22,21 @@ pub fn main() !void {
         _ = c.mrb_funcall(m, c.mrb_top_self(m), "puts", 1, mrb_result);
         defer c.mrb_close(m);
 
+        // import assets which were created in build.zig
+        var assetFiles:[assets.len]struct{[]const u8, []const u8, bool, []const u8} = undefined;
+        inline for (assets, 0..) |asset, idx| {
+            const path, const name, var mime, const to_gzip = asset;
+            if (mime == null) {
+                mime = "text";
+            }
+            assetFiles[idx] = .{"/"++path, mime.?, to_gzip, @embedFile(name)};
+        }
+
         // We specify our "Handler" and, as the last parameter to init, pass an
         // instance of it.
         var handler = Handler{
             .mrb = m,
+            .assetFiles = assetFiles,
         };
         var server = try httpz.Server(*Handler).init(allocator, .{ .address = .localhost(PORT) }, &handler);
 
@@ -38,6 +51,7 @@ pub fn main() !void {
         // Register routes.
 
         router.get("/", index, .{});
+        router.get("/assets/:name", static, .{});
         router.get("/hits", hits, .{});
         router.get("/error", @"error", .{});
 
@@ -52,6 +66,7 @@ pub fn main() !void {
 
 const Handler = struct {
     mrb: ?*c.mrb_state,
+    assetFiles: [assets.len]struct{[]const u8, []const u8, bool, []const u8},
     _hits: usize = 0,
 
     // If the handler defines a special "notFound" function, it'll be called
@@ -134,6 +149,26 @@ fn index(_: *Handler, _: *httpz.Request, res: *httpz.Response) !void {
         \\ <li><a href="/not_found">Custom not found handler</a>
         \\ <li><a href="/error">Custom error  handler</a>
     ;
+}
+
+fn static(h: *Handler, req: *httpz.Request, res: *httpz.Response) !void {
+    const files = h.assetFiles;
+    const path = req.url.path;
+    const name = req.param("name");
+    std.debug.print("static {s} {s}\n", .{ path, name orelse "no asset name" });
+    for(files) |file| {
+        if (std.mem.eql(u8, path, file[0])) {
+            res.setStatus(.ok);
+            res.header("content-type", file[1]);
+            if (file[2] == true) { // gzipped
+                res.header("content-encoding", "gzip");
+            }
+            res.body = file[3];
+            return;
+        }
+    }
+    res.status = 404;
+    res.body = "Asset not found!";
 }
 
 pub fn hits(h: *Handler, _: *httpz.Request, res: *httpz.Response) !void {
