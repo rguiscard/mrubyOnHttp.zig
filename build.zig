@@ -119,7 +119,7 @@ pub fn build(b: *std.Build) void {
                 "-c",
             });
             gzip.addFileArg(b.path(path));
-            const gout = gzip.captureStdOut();
+            const gout = gzip.captureStdOut(.{});
             exe.root_module.addAnonymousImport(name, .{ .root_source_file = gout});
         } else {
             exe.root_module.addAnonymousImport(name, .{ .root_source_file = b.path(path)});
