@@ -37,7 +37,7 @@ pub fn build(b: *std.Build) void {
     });
 
     // mruby
-    const mruby_path = "mruby-4.0.0-rc2/build/host/";
+    const mruby_path = "mruby-4.0.0/build/host/";
     const mrbc = b.addSystemCommand(&.{
         mruby_path++"bin/mrbc",
         "-Brb_main",

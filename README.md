@@ -58,6 +58,10 @@ First, add all headers needed into *mruby_headers.h*. Translate it to zig:
 zig translate-c -lc -I mruby-4.0.0/build/host/include mruby_headers.h > src/mruby_h.zig
 ```
 
+#### For 0.15.x
+
+This part seems not necessary for Zig 0.16.0. While *mruby_h.zig* is explicitly created in command above by executable *zig translate-c*, it can prossibly be created by *std.Build.addTranslateC* in *build.zig*.
+
 Based on [mruby.zig](https://github.com/jethrodaniel/mruby.zig), to fix the opaque error during compilation,
 modify *src/mruby_h.zig* from 
 

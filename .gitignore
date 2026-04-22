@@ -3,4 +3,4 @@
 zig-out/
 zig-pkg/
 .zig-cache/
-mruby-4.0.0-rc2/
+mruby-4.0.0/
